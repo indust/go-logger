@@ -129,10 +129,6 @@ func (s *SentryCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 		}
 	}
 
-	if ent.Level >= s.EventLevel {
-		s.captureEvent(ent, data, errField)
-	}
-
 	breadcrumb := sentry.Breadcrumb{
 		Data:      data.Fields,
 		Level:     SentryLevel(ent.Level),
@@ -141,6 +137,10 @@ func (s *SentryCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 		Type:      BreadcrumbTypeDefault,
 	}
 	s.hub.AddBreadcrumb(&breadcrumb, nil)
+
+	if ent.Level >= s.EventLevel {
+		s.captureEvent(ent, data, errField)
+	}
 
 	if ent.Level > zapcore.ErrorLevel {
 		_ = s.Sync()
