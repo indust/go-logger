@@ -160,17 +160,19 @@ func (s *SentryCore) captureEvent(ent zapcore.Entry, data *zapcore.MapObjectEnco
 	}
 
 	event.Threads = []sentry.Thread{{
-		ID:         "0",
-		Current:    true,
-		Crashed:    ent.Level >= zapcore.DPanicLevel,
-		Stacktrace: newStacktrace(),
+		ID:      "0",
+		Current: true,
+		Crashed: ent.Level >= zapcore.DPanicLevel,
 	}}
 
 	if len(event.Exception) != 0 {
 		if event.Exception[0].Stacktrace == nil {
 			event.Exception[0].Stacktrace = newStacktrace()
 		}
+		event.Threads[0].Stacktrace = event.Exception[0].Stacktrace
 		event.Exception[0].ThreadID = 0
+	} else {
+		event.Threads[0].Stacktrace = newStacktrace()
 	}
 
 	// event.Exception should be sorted such that the most recent error is last
