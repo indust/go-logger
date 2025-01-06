@@ -21,7 +21,6 @@ type SentryUserTagMap struct {
 	Name      string
 	Username  string
 	Email     string
-	Segment   string
 }
 
 type SentryCore struct {
@@ -237,7 +236,6 @@ func (s *SentryCore) prepareSentryUser(data *map[string]interface{}) sentry.User
 		Name:      fmt.Sprintf("%v", pop(data, s.UserTags.Name)),
 		Username:  fmt.Sprintf("%v", pop(data, s.UserTags.Username)),
 		Email:     fmt.Sprintf("%v", pop(data, s.UserTags.Email)),
-		Segment:   fmt.Sprintf("%v", pop(data, s.UserTags.Segment)),
 	}
 }
 
