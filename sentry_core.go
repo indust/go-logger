@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -155,29 +156,32 @@ func (s *SentryCore) captureEvent(ent zapcore.Entry, data *zapcore.MapObjectEnco
 	s.parseFieldsToEvent(event, data.Fields)
 
 	if errField != nil {
-		event.Exception = s.convertErrorToException(errField)
+		//event.Exception = s.convertErrorToException(errField)
+		event.SetException(errField, 12)
 	}
-
-	event.Threads = []sentry.Thread{{
-		ID:      "0",
-		Current: true,
-		Crashed: ent.Level >= zapcore.DPanicLevel,
-	}}
 
 	if len(event.Exception) != 0 {
-		if event.Exception[0].Stacktrace == nil {
-			event.Exception[0].Stacktrace = newStacktrace()
+		lastSentryException := event.Exception[len(event.Exception)-1]
+		errorMessage := lastSentryException.Value
+		errorSummary := strings.Split(errorMessage, ":")[0]
+		logMessage := event.Message
+		event.Message = errorMessage
+		sentrySummaryRecord := sentry.Exception{
+			Type:       logMessage,
+			Value:      errorSummary,
+			Module:     lastSentryException.Module,
+			ThreadID:   lastSentryException.ThreadID,
+			Stacktrace: newStacktrace(),
+			Mechanism:  lastSentryException.Mechanism,
 		}
-		event.Threads[0].Stacktrace = event.Exception[0].Stacktrace
-		event.Exception[0].ThreadID = 0
+		event.Exception = append(event.Exception, sentrySummaryRecord)
 	} else {
-		event.Threads[0].Stacktrace = newStacktrace()
-	}
-
-	// event.Exception should be sorted such that the most recent error is last
-	for i := len(event.Exception)/2 - 1; i >= 0; i-- {
-		opp := len(event.Exception) - 1 - i
-		event.Exception[i], event.Exception[opp] = event.Exception[opp], event.Exception[i]
+		event.Threads = []sentry.Thread{{
+			ID:         "0",
+			Current:    true,
+			Crashed:    ent.Level >= zapcore.DPanicLevel,
+			Stacktrace: newStacktrace(),
+		}}
 	}
 
 	s.hub.CaptureEvent(event)
