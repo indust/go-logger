@@ -79,14 +79,6 @@ func RequestLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 				ctx = span.Context() //nolint:contextcheck
 
 				core = NewSentryCoreWrapper(localCore, hub, options...)
-
-				loggerOptions = append(loggerOptions, zap.Hooks(func(entry zapcore.Entry) error {
-					//nolint: forcetypeassert
-					if entry.Level >= core.(sentryCoreWrapper).SentryCore().EventLevel && hub.LastEventID() != "" {
-						ww.Header().Add(sentryEventIDHeader, string(hub.LastEventID()))
-					}
-					return nil
-				}))
 			}
 
 			requestLogger := zap.New(core, loggerOptions...)
@@ -142,10 +134,22 @@ func ForkedLogger(logger *zap.Logger) *zap.Logger {
 	sentryCore := wrappedCore.SentryCore()
 	options := prepareOptions(sentryCore)
 
-	hub := sentry.NewHub(sentryCore.hub.Client(), sentry.NewScope())
+	hub := sentryCore.hub.Clone()
 	core := NewSentryCoreWrapper(localCore, hub, options...)
 
 	return zap.New(core)
+}
+
+func AttachHub(logger *zap.Logger, hub *sentry.Hub, opts ...SentryCoreOption) *zap.Logger {
+	wrappedCore, ok := logger.Core().(sentryCoreWrapper)
+	if !ok {
+		return logger
+	}
+
+	local := wrappedCore.LocalCore()
+	options := append(prepareOptions(wrappedCore.SentryCore()), opts...)
+	newCore := NewSentryCoreWrapper(local, hub, options...)
+	return zap.New(newCore)
 }
 
 func prepareOptions(core *SentryCore) []SentryCoreOption {
