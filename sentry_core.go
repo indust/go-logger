@@ -35,6 +35,10 @@ type SentryCore struct {
 
 	UserTags    SentryUserTagMap
 	GenericTags []string
+
+	// Cached from With("feature", ...) so we can build issue titles even when
+	// feature isn't passed on every log call.
+	featureValue string
 }
 
 type SentryCoreOption func(*SentryCore)
@@ -100,6 +104,7 @@ func (s *SentryCore) With(fields []zapcore.Field) zapcore.Core {
 		EventLevel:      s.EventLevel,
 		UserTags:        s.UserTags,
 		GenericTags:     s.GenericTags,
+		featureValue:    s.featureValue,
 	}
 
 	data := zapcore.NewMapObjectEncoder()
@@ -107,6 +112,13 @@ func (s *SentryCore) With(fields []zapcore.Field) zapcore.Core {
 		field.AddTo(data)
 	}
 	clone.scope.SetExtras(data.Fields)
+	if v, ok := data.Fields["feature"]; ok {
+		f := strings.TrimSpace(fmt.Sprint(v))
+		if f == "<nil>" {
+			f = ""
+		}
+		clone.featureValue = f
+	}
 
 	return clone
 }
@@ -155,6 +167,24 @@ func (s *SentryCore) captureEvent(ent zapcore.Entry, data *zapcore.MapObjectEnco
 	event.Message = ent.Message
 	s.parseFieldsToEvent(event, data.Fields)
 
+	feature := ""
+	if v, ok := data.Fields["feature"]; ok {
+		feature = strings.TrimSpace(fmt.Sprint(v))
+	} else {
+		feature = strings.TrimSpace(s.featureValue)
+	}
+	if feature == "<nil>" {
+		feature = ""
+	}
+
+	prefix := ""
+	if ent.LoggerName != "" {
+		prefix += "[" + ent.LoggerName + "]"
+	}
+	if feature != "" {
+		prefix += "[" + feature + "]"
+	}
+
 	if errField != nil {
 		//event.Exception = s.convertErrorToException(errField)
 		event.SetException(errField, 12)
@@ -164,7 +194,10 @@ func (s *SentryCore) captureEvent(ent zapcore.Entry, data *zapcore.MapObjectEnco
 		lastSentryException := event.Exception[len(event.Exception)-1]
 		errorMessage := lastSentryException.Value
 		errorSummary := strings.Split(errorMessage, ":")[0]
-		logMessage := event.Message
+		logMessage := ent.Message
+		if prefix != "" && !strings.HasPrefix(logMessage, prefix) {
+			logMessage = prefix + logMessage
+		}
 		event.Message = errorMessage
 		sentrySummaryRecord := sentry.Exception{
 			Type:       logMessage,
@@ -176,6 +209,9 @@ func (s *SentryCore) captureEvent(ent zapcore.Entry, data *zapcore.MapObjectEnco
 		}
 		event.Exception = append(event.Exception, sentrySummaryRecord)
 	} else {
+		if prefix != "" && !strings.HasPrefix(event.Message, prefix) {
+			event.Message = prefix + event.Message
+		}
 		event.Threads = []sentry.Thread{{
 			ID:         "0",
 			Current:    true,
