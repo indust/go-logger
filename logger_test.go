@@ -35,7 +35,7 @@ func (s *TestLoggerSuite) SetupTest() {
 		Return().
 		MinTimes(0)
 	transportMock.EXPECT().
-		Flush(gomock.Any()).
+		FlushWithContext(gomock.Any()).
 		Return(true).
 		MinTimes(0)
 

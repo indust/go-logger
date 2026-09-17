@@ -40,7 +40,7 @@ func (suite *SentryCoreSuite) SetupTest() {
 			Return()
 	}
 	suite.flushMock = transportMock.EXPECT().
-		Flush(gomock.Any()).
+		FlushWithContext(gomock.Any()).
 		Return(true).
 		MinTimes(0)
 
